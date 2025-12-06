@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>對錯空間 v22 (Fixed)</title>
+    <title>對錯空間 v23 (Fixed)</title>
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#202124">
@@ -17,7 +17,6 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-storage.js"></script>
 
     <style>
-        /* 樣式區 */
         :root { --bg-color: #202124; --surface-color: #303134; --text-primary: #e8eaed; --text-secondary: #9aa0a6; --divider: #3c4043; --blue: #8ab4f8; --red: #f28b82; --green: #81c995; --yellow: #fdd663; --orange: #fcad70; --purple: #c58af9; --teal: #64ffda; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: var(--bg-color); margin: 0; padding: 0; color: var(--text-primary); -webkit-tap-highlight-color: transparent; padding-bottom: 90px; overscroll-behavior-y: none; }
         button, input, textarea, select { font-family: inherit; }
@@ -201,7 +200,7 @@
 
     <script>
         // ==========================================
-        // ⚠️【請確認這裡已填入你正確的 Config】
+        // ⚠️【請填入你的 Firebase Config】
         const firebaseConfig = {
             apiKey: "AIzaSyDEKjRwWI6vkCg-dIsv1I4BamcC34UaJTU",
             authDomain: "te-interiorlab.firebaseapp.com",
@@ -229,7 +228,7 @@
 
         window.onload = () => {
             document.getElementById('loading-overlay').style.display = 'flex';
-            document.getElementById('loading-msg').innerText = '正在匿名登入...';
+            document.getElementById('loading-msg').innerText = '正在匿名登入 Google...';
             
             auth.signInAnonymously()
                 .then(() => {
@@ -261,12 +260,11 @@
             console.error(err);
             document.getElementById('loading-overlay').style.display = 'none';
             if (err.code === 'permission-denied') {
-                alert("讀取失敗：權限不足。請檢查 Firebase Rules (request.auth != null)。");
+                alert("讀取失敗：權限不足 (Permission Denied)\n\n請去 Firestore Rules 檢查是否設為 allow read, write: if true (或 auth != null)");
             }
         }
 
         function refreshUI() {
-            // V22: 僅刷新非編輯頁面，防止輸入中斷
             if(document.getElementById('home-page').classList.contains('active')) { renderCalendar(); checkAlerts(); } 
             else if (document.getElementById('design-list-page').classList.contains('active')) renderList('design');
             else if (document.getElementById('engineering-list-page').classList.contains('active')) renderList('engineering');
@@ -304,7 +302,7 @@
             try {
                 const docRef = await db.collection(collection).add(newObj);
                 
-                // V22: 手動插入本地陣列，確保立刻能開啟
+                // V22: 手動將新案件推入本地陣列，確保立刻能開啟
                 newObj.id = docRef.id;
                 if(addModeType === 'design') designProjects.push(newObj);
                 else engProjects.push(newObj);
@@ -362,28 +360,86 @@
             document.getElementById('new-log-date').value = new Date().toISOString().split('T')[0];
         }
 
-        // ... (以下邏輯與 V19/V20 相同) ...
         function clearTempData() { tempPhotoData = ''; tempPhotoFile = null; const p=document.getElementById('new-log-preview'); if(p){p.src='';p.style.display='none';} document.getElementById('log-photo-upload').value=''; document.getElementById('new-log-text').value=''; }
         function toNum(el) { el.value = el.value.replace(/,/g, ''); }
         function toCur(el) { let v = parseInt(el.value.replace(/,/g, '')) || 0; el.value = v > 0 ? formatNumber(v) : ''; }
         function handleTempPhoto(i){if(i.files&&i.files[0]){tempPhotoFile = i.files[0]; const r=new FileReader(); r.onload=e=>{document.getElementById('new-log-preview').src=e.target.result; document.getElementById('new-log-preview').style.display='block';}; r.readAsDataURL(i.files[0]);}}
-        function navigateTo(pageId) { clearTempData(); document.querySelectorAll('.page').forEach(p => p.classList.remove('active')); document.getElementById(pageId).classList.add('active'); const back = document.getElementById('back-btn'); const title = document.getElementById('page-title'); if (pageId === 'home-page') { back.style.display = 'none'; title.innerText = '對錯空間實驗室'; renderCalendar(); checkAlerts(); } else { back.style.display = 'block'; back.onclick = () => goBack(); if (pageId === 'design-list-page') { title.innerText = '設計案件列表'; renderList('design'); } else if (pageId === 'engineering-list-page') { title.innerText = '工程案件列表'; renderList('engineering'); } else if (pageId === 'warranty-list-page') { title.innerText = '完工保固列表'; renderList('warranty'); } else if (pageId === 'payment-page') { title.innerText = '收款進度'; renderPaymentPage(); } else if (pageId === 'project-detail-page') { title.innerText = getDetailTitle(); } } }
+        
+        function navigateTo(pageId) { 
+            clearTempData(); 
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active')); 
+            document.getElementById(pageId).classList.add('active'); 
+            const back = document.getElementById('back-btn'); 
+            const title = document.getElementById('page-title'); 
+            if (pageId === 'home-page') { 
+                back.style.display = 'none'; title.innerText = '對錯空間實驗室'; renderCalendar(); checkAlerts(); 
+            } else { 
+                back.style.display = 'block'; back.onclick = () => goBack(); 
+                if (pageId === 'design-list-page') { title.innerText = '設計案件列表'; renderList('design'); } 
+                else if (pageId === 'engineering-list-page') { title.innerText = '工程案件列表'; renderList('engineering'); } 
+                else if (pageId === 'warranty-list-page') { title.innerText = '完工保固列表'; renderList('warranty'); } 
+                else if (pageId === 'payment-page') { title.innerText = '收款進度'; renderPaymentPage(); } 
+                else if (pageId === 'project-detail-page') { title.innerText = getDetailTitle(); } 
+            } 
+        }
         function getDetailTitle() { return currentType === 'design' ? '設計詳情' : currentType === 'engineering' ? '工程詳情' : '保固詳情'; }
-        function goBack() { clearTempData(); if(document.getElementById('project-detail-page').classList.contains('active') && document.referrer === 'payment') { navigateTo('payment-page'); return; } if(document.getElementById('project-detail-page').classList.contains('active')) navigateTo(currentType === 'design' ? 'design-list-page' : (currentType === 'engineering' ? 'engineering-list-page' : 'warranty-list-page')); else navigateTo('home-page'); }
-        async function deleteLog(lid){ if(!confirm('刪除?'))return; const collection = currentType === 'design' ? "design_projects" : "eng_projects"; const list = currentType === 'design' ? designProjects : engProjects; const p = list.find(x => x.id === currentId); const updatedLogs = p.logs.filter(k=>k.id!==lid); await updateCloud(collection, currentId, { logs: updatedLogs }); p.logs = updatedLogs; renderLogs(p); }
+        function goBack() { 
+            clearTempData(); 
+            if(document.getElementById('project-detail-page').classList.contains('active') && document.referrer === 'payment') { navigateTo('payment-page'); return; } 
+            if(document.getElementById('project-detail-page').classList.contains('active')) navigateTo(currentType === 'design' ? 'design-list-page' : (currentType === 'engineering' ? 'engineering-list-page' : 'warranty-list-page')); 
+            else navigateTo('home-page'); 
+        }
+
+        async function deleteLog(lid){ 
+            if(!confirm('刪除?'))return; 
+            const collection = currentType === 'design' ? "design_projects" : "eng_projects"; 
+            const list = currentType === 'design' ? designProjects : engProjects; 
+            const p = list.find(x => x.id === currentId); 
+            const updatedLogs = p.logs.filter(k=>k.id!==lid); 
+            await updateCloud(collection, currentId, { logs: updatedLogs }); 
+            p.logs = updatedLogs; renderLogs(p); 
+        }
+
         function openDetail(type, id) { 
             try {
                 clearTempData(); currentType = type; currentId = id; 
                 const list = type === 'design' ? designProjects : engProjects; 
                 const p = list.find(x => x.id === id); 
-                if(!p) { alert("找不到案件資料，請稍後再試 (Syncing...)"); return; }
+                
+                if(!p) {
+                    alert("找不到案件資料，請稍後再試 (Syncing...)");
+                    return; 
+                }
+
                 ['name', 'client', 'phone', 'address', 'parking', 'code'].forEach(key => { document.getElementById('d-' + key).value = p[key] || ''; }); 
-                const dPriceRow = document.getElementById('design-price-row'); const ePriceRow = document.getElementById('engineering-price-row'); const wDateRow = document.getElementById('warranty-date-row'); const payBtn = document.getElementById('add-payment-btn'); dPriceRow.style.display = 'none'; ePriceRow.style.display = 'none'; wDateRow.style.display = 'none'; payBtn.style.display = 'none'; 
-                if (type === 'design') { dPriceRow.style.display = 'block'; document.getElementById('d-design-price').value = p.designPrice ? formatNumber(p.designPrice) : ''; if(!p.stageOrder) p.stageOrder = [...DEFAULT_DESIGN_ORDER]; document.getElementById('stages-title').innerText = '設計階段 (可拖曳排序)'; } else { ePriceRow.style.display = 'block'; document.getElementById('d-eng-price').value = p.engPrice ? formatNumber(p.engPrice) : ''; if(type === 'engineering') payBtn.style.display = 'block'; if(!p.stageOrder) p.stageOrder = [...DEFAULT_ENG_ORDER]; document.getElementById('stages-title').innerText = '工程階段 (可拖曳排序)'; } 
+                const dPriceRow = document.getElementById('design-price-row'); 
+                const ePriceRow = document.getElementById('engineering-price-row'); 
+                const wDateRow = document.getElementById('warranty-date-row'); 
+                const payBtn = document.getElementById('add-payment-btn'); 
+                dPriceRow.style.display = 'none'; ePriceRow.style.display = 'none'; wDateRow.style.display = 'none'; payBtn.style.display = 'none'; 
+                
+                if (type === 'design') { 
+                    dPriceRow.style.display = 'block'; document.getElementById('d-design-price').value = p.designPrice ? formatNumber(p.designPrice) : ''; 
+                    if(!p.stageOrder) p.stageOrder = [...DEFAULT_DESIGN_ORDER]; 
+                    document.getElementById('stages-title').innerText = '設計階段 (可拖曳排序)'; 
+                } else { 
+                    ePriceRow.style.display = 'block'; document.getElementById('d-eng-price').value = p.engPrice ? formatNumber(p.engPrice) : ''; 
+                    if(type === 'engineering') payBtn.style.display = 'block'; 
+                    if(!p.stageOrder) p.stageOrder = [...DEFAULT_ENG_ORDER]; 
+                    document.getElementById('stages-title').innerText = '工程階段 (可拖曳排序)'; 
+                } 
                 if (type === 'warranty' && p.warrantyDate) { wDateRow.style.display = 'block'; document.getElementById('d-warranty-date').value = p.warrantyDate; } 
-                renderDetailPayments(p, type); renderStages(p, type); renderLogs(p); document.getElementById('new-log-date').value = new Date().toISOString().split('T')[0]; renderActionBar(type, p.status); navigateTo('project-detail-page'); 
-            } catch(e) { console.error(e); alert("開啟詳情頁失敗: " + e.message); }
+                
+                renderDetailPayments(p, type); renderStages(p, type); renderLogs(p); 
+                document.getElementById('new-log-date').value = new Date().toISOString().split('T')[0]; 
+                renderActionBar(type, p.status); 
+                navigateTo('project-detail-page');
+            } catch(e) {
+                console.error(e);
+                alert("開啟詳情頁失敗: " + e.message);
+            }
         }
+
         async function updateStageField(sid, f, v) { const collection = currentType === 'design' ? "design_projects" : "eng_projects"; const val = (f === 'cost') ? parseCurrency(v) : v; const updateKey = `stages.${sid}.${f}`; await updateCloud(collection, currentId, { [updateKey]: val }); }
         async function toggleStageEnable(sid, e) { const updateKey = `stages.${sid}.enabled`; await updateCloud("eng_projects", currentId, { [updateKey]: e }); const p = engProjects.find(x => x.id === currentId); if(!p.stages[sid]) p.stages[sid]={}; p.stages[sid].enabled = e; renderStages(p, currentType); }
         async function toggleDone(sid) { const collection = currentType === 'design' ? "design_projects" : "eng_projects"; const list = currentType === 'design' ? designProjects : engProjects; const p = list.find(x => x.id === currentId); const newVal = !p.stages[sid].done; const updateKey = `stages.${sid}.done`; await updateCloud(collection, currentId, { [updateKey]: newVal }); p.stages[sid].done = newVal; renderStages(p, currentType); }
@@ -393,6 +449,26 @@
         function updatePaymentDate(pid, idx, val, type) { updatePaymentVal(pid, idx, 'date', val, type); }
         function updatePaymentLink(pid, idx, val, type) { updatePaymentVal(pid, idx, 'linkedStage', val, type); }
         async function addEngineeringPaymentStage() { const p = engProjects.find(x => x.id === currentId); const newPayments = [...(p.payments||[])]; newPayments.push({ name: `第 ${newPayments.length + 1} 期款`, amount: 0, done: false, date: '', linkedStage: '' }); await updateCloud("eng_projects", currentId, { payments: newPayments }); p.payments = newPayments; renderDetailPayments(p, 'engineering'); }
+        
+        // 確保 renderDetailPayments 被定義
+        function renderDetailPayments(p, type) {
+            const payContainer = document.getElementById('detail-payment-container'); payContainer.innerHTML = '';
+            const priceKey = type === 'design' ? 'designPrice' : 'engPrice'; const totalVal = p[priceKey] || 0; const paymentList = p.payments || [];
+            if(paymentList.length === 0 && type === 'engineering') payContainer.innerHTML = '<div style="color:#666; font-size:0.9rem;">尚無收款期數，請新增</div>';
+            paymentList.forEach((pay, idx) => {
+                let amountInputHtml = '';
+                if (type === 'design') { const disp = formatNumber(Math.round(totalVal * pay.ratio)); amountInputHtml = `<div style="color:var(--yellow); font-weight:bold;">$${disp}</div>`; } 
+                else { amountInputHtml = `<input type="text" class="mini-date" placeholder="金額" value="${formatNumber(pay.amount || '')}" style="width:80px; text-align:right;" onfocus="toNum(this)" onblur="toCur(this); updatePaymentAmount('${p.id}', ${idx}, this.value, 'engineering')">`; }
+                let stageSelectorHtml = '';
+                if (type === 'engineering' || type === 'warranty') {
+                    let options = '<option value="">-- 對應進度 --</option>'; const order = p.stageOrder || DEFAULT_ENG_ORDER;
+                    order.forEach(sid => { const sName = STAGES_ENG_DEF[sid]; const isStageEnabled = p.stages && p.stages[sid] && p.stages[sid].enabled !== false; if(isStageEnabled || sid === 'es_sign') { const sel = pay.linkedStage === sid ? 'selected' : ''; options += `<option value="${sid}" ${sel}>${sName}</option>`; } });
+                    stageSelectorHtml = `<select class="stage-selector" onchange="updatePaymentLink('${p.id}', ${idx}, this.value, 'engineering')">${options}</select>`;
+                }
+                payContainer.innerHTML += `<div class="payment-row"><div class="payment-header"><div class="payment-check-area" onclick="togglePayment('${p.id}', ${idx}, '${type === 'design'?'design':'engineering'}')"><div class="custom-checkbox ${pay.done ? 'checked' : ''}" style="border-color:var(--teal)"></div><span>${pay.name}</span></div><div class="payment-info-area">${amountInputHtml}<input type="date" class="mini-date" value="${pay.date}" style="width:110px; margin-top:5px;" onchange="updatePaymentDate('${p.id}', ${idx}, this.value, '${type === 'design'?'design':'engineering'}')"></div></div>${stageSelectorHtml}</div>`;
+            });
+        }
+
         function handleDragStart(e) { draggedItem = this; e.dataTransfer.effectAllowed = 'move'; this.classList.add('dragging'); }
         function handleDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; return false; }
         function handleDrop(e) { e.stopPropagation(); if (draggedItem !== this) { reorderStages(parseInt(draggedItem.dataset.index), parseInt(this.dataset.index)); } draggedItem.classList.remove('dragging'); return false; }
