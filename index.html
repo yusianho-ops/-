@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>對錯空間 v23.1 (Final)</title>
+    <title>對錯空間 v24 (Fixed)</title>
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#202124">
@@ -17,6 +17,7 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-storage.js"></script>
 
     <style>
+        /* 樣式區 */
         :root { --bg-color: #202124; --surface-color: #303134; --text-primary: #e8eaed; --text-secondary: #9aa0a6; --divider: #3c4043; --blue: #8ab4f8; --red: #f28b82; --green: #81c995; --yellow: #fdd663; --orange: #fcad70; --purple: #c58af9; --teal: #64ffda; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: var(--bg-color); margin: 0; padding: 0; color: var(--text-primary); -webkit-tap-highlight-color: transparent; padding-bottom: 90px; overscroll-behavior-y: none; }
         button, input, textarea, select { font-family: inherit; }
@@ -230,7 +231,7 @@
 
         window.onload = () => {
             document.getElementById('loading-overlay').style.display = 'flex';
-            document.getElementById('loading-msg').innerText = '正在匿名登入 Google...';
+            document.getElementById('loading-msg').innerText = '正在匿名登入...';
             
             auth.signInAnonymously()
                 .then(() => {
@@ -262,7 +263,7 @@
             console.error(err);
             document.getElementById('loading-overlay').style.display = 'none';
             if (err.code === 'permission-denied') {
-                alert("讀取失敗：權限不足 (Permission Denied)\n\n請去 Firestore Rules 檢查是否設為 allow read, write: if request.auth != null");
+                alert("讀取失敗：權限不足。請檢查 Firebase Rules (request.auth != null)。");
             }
         }
 
@@ -281,20 +282,13 @@
             updateCloud(collection, currentId, { [key]: val });
         }
 
-        // V23.1: 確保 createProject 正常運作
         async function createProject() {
             const name = document.getElementById('new-name').value;
             if (!name) return alert("請輸入案件名稱");
             
             const collection = addModeType === 'design' ? "design_projects" : "eng_projects";
             const newObj = {
-                name: name, 
-                stages: {}, 
-                logs: [], 
-                status: 'active', 
-                designPrice: 0, 
-                engPrice: 0, 
-                payments: [],
+                name: name, stages: {}, logs: [], status: 'active', designPrice: 0, engPrice: 0, payments: [],
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
             };
 
@@ -311,7 +305,7 @@
             try {
                 const docRef = await db.collection(collection).add(newObj);
                 
-                // 手動推入本地陣列 (Optimistic UI)
+                // 手動推入本地陣列
                 newObj.id = docRef.id;
                 if(addModeType === 'design') designProjects.push(newObj);
                 else engProjects.push(newObj);
@@ -324,11 +318,7 @@
             } catch (error) {
                 console.error("建立失敗:", error);
                 document.getElementById('loading-overlay').style.display = 'none';
-                if (error.code === 'permission-denied') {
-                    alert("寫入失敗：權限不足。\n\n請檢查 Firestore Rules。");
-                } else {
-                    alert("建立失敗：" + error.message);
-                }
+                alert("建立失敗：" + error.message);
             }
         }
 
@@ -459,7 +449,7 @@
         function updatePaymentLink(pid, idx, val, type) { updatePaymentVal(pid, idx, 'linkedStage', val, type); }
         async function addEngineeringPaymentStage() { const p = engProjects.find(x => x.id === currentId); const newPayments = [...(p.payments||[])]; newPayments.push({ name: `第 ${newPayments.length + 1} 期款`, amount: 0, done: false, date: '', linkedStage: '' }); await updateCloud("eng_projects", currentId, { payments: newPayments }); p.payments = newPayments; renderDetailPayments(p, 'engineering'); }
         
-        // 確保 renderDetailPayments 被定義
+        // Render Detail Payments
         function renderDetailPayments(p, type) {
             const payContainer = document.getElementById('detail-payment-container'); payContainer.innerHTML = '';
             const priceKey = type === 'design' ? 'designPrice' : 'engPrice'; const totalVal = p[priceKey] || 0; const paymentList = p.payments || [];
@@ -505,6 +495,28 @@
         function openAddModal(t){addModeType=t; document.getElementById('modal-title').innerText=t==='design'?'新增設計':'新增工程'; document.getElementById('add-modal').style.display='flex'; document.getElementById('new-name').value='';}
         function closeAddModal(){document.getElementById('add-modal').style.display='none';}
         function changeMonth(n){calDate.setMonth(calDate.getMonth()+n); renderCalendar();}
+
+        // V24: Restore missing renderActionBar function
+        function renderActionBar(type, status) {
+            const b = document.getElementById('action-bar-container'); 
+            b.innerHTML = ''; 
+            if (type === 'design') {
+                b.innerHTML = `
+                    <button class="action-btn btn-track" onclick="updateDesignStatus('tracking')">追蹤中</button>
+                    <button class="action-btn btn-del" onclick="deleteCurrentProject()">刪除</button>
+                    <button class="action-btn btn-done" onclick="convertToEngineering()">完成</button>
+                `; 
+            } else if (type === 'engineering') {
+                const suspendBtnText = status === 'suspended' ? '恢復進行' : '工程暫緩';
+                b.innerHTML = `
+                    <button class="action-btn btn-del" onclick="deleteCurrentProject()">刪除</button>
+                    <button class="action-btn btn-suspend" onclick="toggleSuspend()">${suspendBtnText}</button>
+                    <button class="action-btn btn-done" onclick="moveToWarranty()">完工</button>
+                `;
+            } else if (type === 'warranty') {
+                b.innerHTML = `<button class="action-btn btn-del" onclick="deleteCurrentProject()">刪除保固紀錄</button>`; 
+            }
+        }
     </script>
 </body>
 </html>
