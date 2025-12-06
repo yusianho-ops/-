@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>對錯空間 v15</title>
+    <title>對錯空間 v16</title>
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#202124">
@@ -33,6 +33,7 @@
             color: var(--text-primary);
             -webkit-tap-highlight-color: transparent;
             padding-bottom: 90px;
+            overscroll-behavior-y: none; /* 防止拖曳時下拉重整 */
         }
 
         button, input, textarea, select { font-family: inherit; }
@@ -51,7 +52,7 @@
         }
 
         .container { padding: 20px; max-width: 600px; margin: 0 auto; }
-        .page { display: none; } /* V15: 移除動畫以增加穩定性 */
+        .page { display: none; }
         .page.active { display: block; }
 
         /* 行事曆 */
@@ -113,16 +114,28 @@
         }
         .detail-input:focus { border-color: var(--blue); outline: none; }
 
-        /* V15: 穩定版排序與清單 */
-        .checklist-item { border-bottom: 1px solid var(--divider); padding: 15px 0; background: var(--surface-color); }
+        /* V16: 拖曳與清單 (Touch Optimized) */
+        .checklist-item { 
+            border-bottom: 1px solid var(--divider); padding: 15px 0; background: var(--surface-color); 
+            transition: background 0.1s;
+        }
         .checklist-item.disabled { opacity: 0.5; } 
         
+        /* 拖曳中的樣式 */
+        .checklist-item.dragging { opacity: 0.4; background: #444; border: 1px dashed var(--blue); }
+        .checklist-item.drag-over { border-top: 2px solid var(--blue); }
+
         .check-header { display: flex; align-items: center; margin-bottom: 10px; justify-content: space-between; }
         
-        /* V15: 改用按鈕排序，不依賴拖曳 */
-        .sort-btn-group { display: flex; flex-direction: column; margin-right: 10px; }
-        .sort-btn { background: none; border: none; color: var(--text-secondary); font-size: 0.8rem; padding: 2px; cursor: pointer; line-height: 1; }
-        .sort-btn:active { color: var(--blue); }
+        /* V16: 加大拖曳把手 */
+        .drag-handle {
+            cursor: move; 
+            padding: 10px 15px 10px 0; /* 加大觸控區 */
+            color: var(--text-secondary); 
+            font-size: 1.5rem; /* 加大圖示 */
+            display: flex; align-items: center;
+            touch-action: none; /* 關鍵：防止瀏覽器捲動 */
+        }
 
         .toggle-switch { position: relative; display: inline-block; width: 34px; height: 20px; margin-right: 10px; }
         .toggle-switch input { opacity: 0; width: 0; height: 0; }
@@ -269,7 +282,7 @@
 
         <div class="detail-section">
             <div class="detail-title" style="display:flex; justify-content:space-between;">
-                <span id="stages-title">階段進度 (可排序)</span>
+                <span id="stages-title">階段進度 (可拖曳排序)</span>
                 <span id="progress-display" style="color:var(--green)">0%</span>
             </div>
             <div id="checklist-container"></div>
@@ -303,18 +316,18 @@
         const STAGES_ENG_DEF = { 'es_sign': '工程簽約', 'es1': '開工準備', 'es2': '拆除工程', 'es3': '隔間工程', 'es4': '水電工程', 'es_ac': '冷氣工程', 'es5': '泥作工程', 'es6': '木作工程', 'es7': '系統櫃工程', 'es_kitchen': '廚具工程', 'es8': '油漆工程', 'es9': '燈具工程', 'es10': '鐵件工程', 'es_glass': '玻璃工程', 'es11': '木地板工程', 'es12': '清潔工程', 'es13': '軟裝工程', 'es14': '收尾工程' };
         const DEFAULT_ENG_ORDER = ['es_sign', 'es1', 'es2', 'es3', 'es4', 'es_ac', 'es5', 'es6', 'es7', 'es_kitchen', 'es8', 'es9', 'es10', 'es_glass', 'es11', 'es12', 'es13', 'es14'];
 
-        let designProjects = JSON.parse(localStorage.getItem('db_design_v15')) || [];
-        let engProjects = JSON.parse(localStorage.getItem('db_eng_v15')) || [];
+        let designProjects = JSON.parse(localStorage.getItem('db_design_v16')) || [];
+        let engProjects = JSON.parse(localStorage.getItem('db_eng_v16')) || [];
         let currentType = '', currentId = '', calDate = new Date(), addModeType = '', tempPhotoData = '', currentPaymentTab = 'design';
+        let dragSrcEl = null;
 
         window.onload = () => { renderCalendar(); checkAlerts(); };
 
-        // === 核心資料更新 (V15: 不重繪畫面) ===
+        // === 核心資料更新 (穩定版) ===
         function updateField(key, value) {
             const list = currentType === 'design' ? designProjects : engProjects;
             const p = list.find(x => x.id === currentId);
             if(p) {
-                // 如果是金額欄位，儲存純數字
                 if(key === 'designPrice' || key === 'engPrice') {
                     p[key] = parseCurrency(value);
                 } else {
@@ -323,7 +336,6 @@
                 saveData();
             }
         }
-
         function toNum(el) { el.value = el.value.replace(/,/g, ''); }
         function toCur(el) { let v = parseInt(el.value.replace(/,/g, '')) || 0; el.value = v > 0 ? formatNumber(v) : ''; }
 
@@ -352,7 +364,7 @@
             else navigateTo('home-page');
         }
 
-        // === 詳情頁 ===
+        // === 詳情頁 (含拖曳渲染) ===
         function openDetail(type, id) {
             currentType = type; currentId = id;
             const list = type === 'design' ? designProjects : engProjects;
@@ -373,13 +385,13 @@
                 dPriceRow.style.display = 'block';
                 document.getElementById('d-design-price').value = p.designPrice ? formatNumber(p.designPrice) : '';
                 if(!p.stageOrder) p.stageOrder = [...DEFAULT_DESIGN_ORDER];
-                document.getElementById('stages-title').innerText = '設計階段 (可排序)';
+                document.getElementById('stages-title').innerText = '設計階段 (可拖曳排序)';
             } else {
                 ePriceRow.style.display = 'block';
                 document.getElementById('d-eng-price').value = p.engPrice ? formatNumber(p.engPrice) : '';
                 if(type === 'engineering') payBtn.style.display = 'block';
                 if(!p.stageOrder) p.stageOrder = [...DEFAULT_ENG_ORDER];
-                document.getElementById('stages-title').innerText = '工程階段 (可排序)';
+                document.getElementById('stages-title').innerText = '工程階段 (可拖曳排序)';
             }
             if (type === 'warranty' && p.warrantyDate) {
                 wDateRow.style.display = 'block';
@@ -393,7 +405,7 @@
             navigateTo('project-detail-page');
         }
 
-        // === V15: 穩定版排序 (上下箭頭) ===
+        // === V16 拖曳與觸控邏輯 ===
         function renderStages(p, type) {
             const container = document.getElementById('checklist-container'); container.innerHTML = '';
             let order = p.stageOrder || (type === 'design' ? DEFAULT_DESIGN_ORDER : DEFAULT_ENG_ORDER);
@@ -412,13 +424,21 @@
                 const item = document.createElement('div');
                 item.className = `checklist-item ${sData.done ? 'checked' : ''} ${!isEnabled ? 'disabled' : ''}`;
                 
+                // Desktop Drag
+                item.draggable = true;
+                item.dataset.index = index;
+                item.addEventListener('dragstart', handleDragStart);
+                item.addEventListener('dragover', handleDragOver);
+                item.addEventListener('drop', handleDrop);
+                
                 let header = `<div class="check-header">`;
-                // V15: 穩定排序按鈕
+                
+                // Mobile Touch Handle
                 header += `
-                <div class="sort-btn-group">
-                    <button class="sort-btn" onclick="moveStage(${index}, -1)">▲</button>
-                    <button class="sort-btn" onclick="moveStage(${index}, 1)">▼</button>
-                </div>`;
+                <div class="drag-handle" 
+                     ontouchstart="handleTouchStart(event, ${index})"
+                     ontouchmove="handleTouchMove(event)"
+                     ontouchend="handleTouchEnd(event, ${index})">☰</div>`;
                 
                 if (type === 'engineering' || type === 'warranty') {
                     header += `<label class="toggle-switch"><input type="checkbox" ${sData.enabled ? 'checked' : ''} onchange="toggleStageEnable('${sid}', this.checked)"><span class="slider"></span></label>`;
@@ -442,150 +462,134 @@
             document.getElementById('progress-display').innerText = pct + '%';
         }
 
-        function moveStage(index, direction) {
-            const list = currentType === 'design' ? designProjects : engProjects;
-            const p = list.find(x => x.id === currentId);
-            const newIndex = index + direction;
-            if (newIndex < 0 || newIndex >= p.stageOrder.length) return;
+        // Desktop Events
+        function handleDragStart(e) { dragSrcEl = this; e.dataTransfer.effectAllowed = 'move'; this.classList.add('dragging'); }
+        function handleDragOver(e) { if (e.preventDefault) e.preventDefault(); e.dataTransfer.dropEffect = 'move'; return false; }
+        function handleDrop(e) {
+            e.stopPropagation();
+            if (dragSrcEl !== this) {
+                const list = currentType === 'design' ? designProjects : engProjects;
+                const p = list.find(x => x.id === currentId);
+                const oldIdx = parseInt(dragSrcEl.dataset.index);
+                const newIdx = parseInt(this.dataset.index);
+                const item = p.stageOrder.splice(oldIdx, 1)[0];
+                p.stageOrder.splice(newIdx, 0, item);
+                saveData(); renderStages(p, currentType);
+            }
+            dragSrcEl.classList.remove('dragging'); return false;
+        }
+
+        // Mobile Touch Logic
+        let touchDragSrcIndex = null;
+        
+        function handleTouchStart(e, index) {
+            touchDragSrcIndex = index;
+            // 視覺回饋：找到該行 item 並加上樣式
+            const item = e.target.closest('.checklist-item');
+            if(item) item.classList.add('dragging');
+        }
+
+        function handleTouchMove(e) {
+            e.preventDefault(); // 防止滾動
+            const touch = e.touches[0];
+            const target = document.elementFromPoint(touch.clientX, touch.clientY);
+            const item = target ? target.closest('.checklist-item') : null;
             
-            const item = p.stageOrder.splice(index, 1)[0];
-            p.stageOrder.splice(newIndex, 0, item);
-            saveData();
-            renderStages(p, currentType);
+            // 移除所有 drag-over 樣式
+            document.querySelectorAll('.checklist-item').forEach(el => el.classList.remove('drag-over'));
+            
+            if (item) {
+                item.classList.add('drag-over');
+            }
         }
 
-        // === 列表渲染 ===
-        function renderList(type) { 
-            let list=[], cid=''; if(type==='design'){list=designProjects;cid='design-list-container';}else if(type==='engineering'){list=engProjects.filter(p=>p.status==='active'||p.status==='suspended');cid='engineering-list-container';}else{list=engProjects.filter(p=>p.status==='warranty');cid='warranty-list-container';} 
-            const c=document.getElementById(cid); c.innerHTML=''; list.sort((a,b)=>(a.status==='suspended'?1:-1)); 
-            if(list.length===0) c.innerHTML='<div style="text-align:center;color:#666;margin-top:30px">暫無案件</div>'; 
-            list.forEach(p=>{ 
-                const defs = type === 'design' ? STAGES_DESIGN_DEF : STAGES_ENG_DEF;
-                const order = p.stageOrder || (type === 'design' ? DEFAULT_DESIGN_ORDER : DEFAULT_ENG_ORDER);
-                let currentProgress = '尚未開始', total = 0, done = 0;
-                for(let i=0; i<order.length; i++) {
-                    const sid = order[i]; const s = (p.stages && p.stages[sid]) || {};
-                    const isEnabled = type === 'design' ? true : (s.enabled !== false);
-                    if(isEnabled) { total++; if(s.done) { done++; currentProgress = defs[sid]; } }
-                }
-                const pct=total===0?0:Math.round((done/total)*100); 
-                let tags=''; if(p.status==='tracking')tags+='<span class="tag tag-track">追蹤中</span>'; if(p.status==='suspended')tags+='<span class="tag tag-suspend">暫緩</span>'; if(p.status==='warranty')tags+='<span class="tag tag-warranty">保固中</span>'; 
-                let oType=type==='warranty'?'engineering':type; 
-                c.innerHTML+=`<div class="project-card" onclick="openDetail('${type==='warranty'?'warranty':oType}','${p.id}')"><div style="position:relative;z-index:2;"><div style="font-weight:bold;color:var(--text-primary)">${p.name} ${tags}</div><div style="font-size:0.9rem;color:var(--text-secondary)">${p.client||''}</div><div class="card-progress-text">目前進度：${currentProgress}</div></div><div class="progress-bg"><div class="progress-fill" style="width:${pct}%"></div></div></div>`; 
-            }); 
-        }
-
-        // === 收款頁面 ===
-        function switchPaymentTab(tab) { currentPaymentTab = tab; document.getElementById('tab-design').className = tab === 'design' ? 'tab-btn active' : 'tab-btn'; document.getElementById('tab-engineering').className = tab === 'engineering' ? 'tab-btn active' : 'tab-btn'; renderPaymentPage(); }
-        function renderPaymentPage() {
-            const container = document.getElementById('payment-content-container'); container.innerHTML = '';
-            const list = currentPaymentTab === 'design' ? designProjects : engProjects;
-            if(list.length === 0) { container.innerHTML = '<div style="text-align:center;color:#666;margin-top:30px">暫無合約</div>'; return; }
-            list.forEach(p => {
-                const priceKey = currentPaymentTab === 'design' ? 'designPrice' : 'engPrice';
-                const totalVal = parseInt(p[priceKey]) || 0;
-                
-                let profitHtml = '';
-                if (currentPaymentTab === 'engineering') {
-                    let totalCost = 0; Object.values(p.stages || {}).forEach(s => { if (s.enabled && s.cost) totalCost += parseInt(s.cost || 0); });
-                    const profit = totalVal - totalCost;
-                    const profitClass = profit >= 0 ? 'profit-positive' : 'profit-negative';
-                    profitHtml = `<div class="profit-box"><div class="profit-title">財務損益表 (僅內部顯示)</div><div class="profit-row"><span>合約總收</span> <span>$${formatNumber(totalVal)}</span></div><div class="profit-row"><span>發包總支</span> <span>$${formatNumber(totalCost)}</span></div><div class="profit-final"><span>預估毛利</span> <span class="${profitClass}">$${formatNumber(profit)}</span></div></div>`;
-                }
-                
-                let paymentsHtml = '';
-                (p.payments || []).forEach((pay, idx) => {
-                    let amountDisplay = '待計算';
-                    if (totalVal > 0) {
-                        if (pay.ratio) amountDisplay = formatNumber(Math.round(totalVal * pay.ratio));
-                        else if (pay.amount) amountDisplay = formatNumber(pay.amount);
-                    }
-                    let linkedStageName = '';
-                    if (currentPaymentTab === 'engineering' && pay.linkedStage) {
-                        const s = STAGES_ENG_DEF[pay.linkedStage];
-                        if(s) linkedStageName = `<div style="font-size:0.8rem; color:var(--text-secondary)">連結：${s}</div>`;
-                    }
-                    paymentsHtml += `<div class="payment-row"><div class="payment-header"><div class="payment-check-area" onclick="togglePayment('${p.id}', ${idx}, '${currentPaymentTab}')"><div class="custom-checkbox ${pay.done ? 'checked' : ''}" style="border-color:var(--teal)"></div><div style="display:flex; flex-direction:column"><span>${pay.name}</span>${linkedStageName}</div></div><div class="payment-info-area"><div style="color:var(--yellow); font-weight:bold;">$${amountDisplay}</div><input type="date" class="mini-date" value="${pay.date}" style="width:110px;" onchange="updatePaymentDate('${p.id}', ${idx}, this.value, '${currentPaymentTab}')"></div></div></div>`;
-                });
-                const div = document.createElement('div'); div.className = 'payment-card';
-                div.innerHTML = `<div class="payment-title">${p.name} <span style="font-size:0.8rem; font-weight:normal; color:#888;">(${p.client||''})</span></div><div class="payment-amount">合約總額：$${formatNumber(totalVal)}</div>${profitHtml}${paymentsHtml}`;
-                container.appendChild(div);
+        function handleTouchEnd(e, index) {
+            const touch = e.changedTouches[0];
+            const target = document.elementFromPoint(touch.clientX, touch.clientY);
+            const targetItem = target ? target.closest('.checklist-item') : null;
+            
+            // 移除樣式
+            document.querySelectorAll('.checklist-item').forEach(el => {
+                el.classList.remove('dragging');
+                el.classList.remove('drag-over');
             });
+
+            if (targetItem && targetItem.dataset.index !== undefined) {
+                const newIndex = parseInt(targetItem.dataset.index);
+                if (touchDragSrcIndex !== null && touchDragSrcIndex !== newIndex) {
+                    const list = currentType === 'design' ? designProjects : engProjects;
+                    const p = list.find(x => x.id === currentId);
+                    
+                    // 移動資料
+                    const item = p.stageOrder.splice(touchDragSrcIndex, 1)[0];
+                    p.stageOrder.splice(newIndex, 0, item);
+                    
+                    saveData();
+                    renderStages(p, currentType);
+                }
+            }
+            touchDragSrcIndex = null;
         }
 
-        // === 詳情頁收款區 (V15: 確保更新正確) ===
-        function renderDetailPayments(p, type) {
-            const payContainer = document.getElementById('detail-payment-container'); payContainer.innerHTML = '';
-            const priceKey = type === 'design' ? 'designPrice' : 'engPrice'; 
-            const totalVal = parseInt(p[priceKey]) || 0;
-            const paymentList = p.payments || [];
-
-            if(paymentList.length === 0 && type === 'engineering') payContainer.innerHTML = '<div style="color:#666; font-size:0.9rem;">尚無收款期數，請新增</div>';
-
-            paymentList.forEach((pay, idx) => {
-                let amountInputHtml = '';
-                if (type === 'design') {
-                    const disp = formatNumber(Math.round(totalVal * pay.ratio));
-                    amountInputHtml = `<div style="color:var(--yellow); font-weight:bold;">$${disp}</div>`;
-                } else {
-                    amountInputHtml = `<input type="text" class="mini-date" placeholder="金額" value="${formatNumber(pay.amount || '')}" style="width:80px; text-align:right;" onfocus="toNum(this)" onblur="toCur(this); updatePaymentAmount('${p.id}', ${idx}, this.value, 'engineering')">`;
-                }
-                
-                let stageSelectorHtml = '';
-                if (type === 'engineering' || type === 'warranty') {
-                    let options = '<option value="">-- 對應進度 --</option>';
-                    const order = p.stageOrder || DEFAULT_ENG_ORDER;
-                    order.forEach(sid => {
-                         const sName = STAGES_ENG_DEF[sid];
-                         const isStageEnabled = p.stages && p.stages[sid] && p.stages[sid].enabled !== false;
-                         if(isStageEnabled || sid === 'es_sign') {
-                             const sel = pay.linkedStage === sid ? 'selected' : '';
-                             options += `<option value="${sid}" ${sel}>${sName}</option>`;
-                         }
-                    });
-                    stageSelectorHtml = `<select class="stage-selector" onchange="updatePaymentLink('${p.id}', ${idx}, this.value, 'engineering')">${options}</select>`;
-                }
-
-                payContainer.innerHTML += `<div class="payment-row"><div class="payment-header"><div class="payment-check-area" onclick="togglePayment('${p.id}', ${idx}, '${type === 'design'?'design':'engineering'}')"><div class="custom-checkbox ${pay.done ? 'checked' : ''}" style="border-color:var(--teal)"></div><span>${pay.name}</span></div><div class="payment-info-area">${amountInputHtml}<input type="date" class="mini-date" value="${pay.date}" style="width:110px; margin-top:5px;" onchange="updatePaymentDate('${p.id}', ${idx}, this.value, '${type === 'design'?'design':'engineering'}')"></div></div>${stageSelectorHtml}</div>`;
-            });
-        }
-
-        // === 共用邏輯 ===
+        // === 其他功能保持不變 ===
         function updateStageField(sid, f, v) { 
             const list = currentType === 'design' ? designProjects : engProjects; const p = list.find(x => x.id === currentId); 
             p.stages[sid][f] = (f === 'cost') ? parseCurrency(v) : v; saveData(); 
         }
         function updatePaymentAmount(pid, idx, val, type) { const list = type === 'design' ? designProjects : engProjects; const p = list.find(x => x.id === pid); p.payments[idx].amount = parseCurrency(val); saveData(); }
-        function togglePayment(pid, idx, type) {
-            const list = type === 'design' ? designProjects : engProjects; const p = list.find(x => x.id === pid);
-            p.payments[idx].done = !p.payments[idx].done;
-            if(p.payments[idx].done && !p.payments[idx].date) p.payments[idx].date = new Date().toISOString().split('T')[0];
-            saveData();
-            // 局部刷新
-            if(document.getElementById('payment-page').classList.contains('active')) renderPaymentPage();
-            else renderDetailPayments(p, type);
+        function switchPaymentTab(tab) { currentPaymentTab = tab; document.getElementById('tab-design').className = tab === 'design' ? 'tab-btn active' : 'tab-btn'; document.getElementById('tab-engineering').className = tab === 'engineering' ? 'tab-btn active' : 'tab-btn'; renderPaymentPage(); }
+        function renderPaymentPage() {
+            const container = document.getElementById('payment-content-container'); container.innerHTML = ''; const list = currentPaymentTab === 'design' ? designProjects : engProjects;
+            if(list.length === 0) { container.innerHTML = '<div style="text-align:center;color:#666;margin-top:30px">暫無合約</div>'; return; }
+            list.forEach(p => {
+                const priceKey = currentPaymentTab === 'design' ? 'designPrice' : 'engPrice'; const totalStr = p[priceKey] || '未報價'; const totalVal = totalStr; 
+                let profitHtml = '';
+                if (currentPaymentTab === 'engineering') {
+                    let totalCost = 0; Object.values(p.stages || {}).forEach(s => { if (s.enabled && s.cost) totalCost += parseInt(s.cost || 0); });
+                    const profit = totalVal - totalCost; const profitClass = profit >= 0 ? 'profit-positive' : 'profit-negative';
+                    profitHtml = `<div class="profit-box"><div class="profit-title">財務損益表 (僅內部顯示)</div><div class="profit-row"><span>合約總收</span> <span>$${formatNumber(totalVal)}</span></div><div class="profit-row"><span>發包總支</span> <span>$${formatNumber(totalCost)}</span></div><div class="profit-final"><span>預估毛利</span> <span class="${profitClass}">$${formatNumber(profit)}</span></div></div>`;
+                }
+                let paymentsHtml = ''; (p.payments || []).forEach((pay, idx) => {
+                    let amountDisplay = '待計算'; if (totalVal > 0) { if (pay.ratio) amountDisplay = formatNumber(Math.round(totalVal * pay.ratio)); else if (pay.amount) amountDisplay = formatNumber(pay.amount); }
+                    let linkedStageName = ''; if (currentPaymentTab === 'engineering' && pay.linkedStage) { const s = STAGES_ENG_DEF[pay.linkedStage]; if(s) linkedStageName = `<div style="font-size:0.8rem; color:var(--text-secondary)">連結：${s}</div>`; }
+                    paymentsHtml += `<div class="payment-row"><div class="payment-header"><div class="payment-check-area" onclick="togglePayment('${p.id}', ${idx}, '${currentPaymentTab}')"><div class="custom-checkbox ${pay.done ? 'checked' : ''}" style="border-color:var(--teal)"></div><div style="display:flex; flex-direction:column"><span>${pay.name}</span>${linkedStageName}</div></div><div class="payment-info-area"><div style="color:var(--yellow); font-weight:bold;">$${amountDisplay}</div><input type="date" class="mini-date" value="${pay.date}" style="width:110px;" onchange="updatePaymentDate('${p.id}', ${idx}, this.value, '${currentPaymentTab}')"></div></div></div>`;
+                });
+                const div = document.createElement('div'); div.className = 'payment-card'; div.innerHTML = `<div class="payment-title">${p.name} <span style="font-size:0.8rem; font-weight:normal; color:#888;">(${p.client||''})</span></div><div class="payment-amount">合約總額：$${formatNumber(totalVal)}</div>${profitHtml}${paymentsHtml}`; container.appendChild(div);
+            });
         }
+        function renderDetailPayments(p, type) {
+            const payContainer = document.getElementById('detail-payment-container'); payContainer.innerHTML = '';
+            const priceKey = type === 'design' ? 'designPrice' : 'engPrice'; const totalVal = p[priceKey] || 0; const paymentList = p.payments || [];
+            if(paymentList.length === 0 && type === 'engineering') payContainer.innerHTML = '<div style="color:#666; font-size:0.9rem;">尚無收款期數，請新增</div>';
+            paymentList.forEach((pay, idx) => {
+                let amountInputHtml = '';
+                if (type === 'design') { const disp = formatNumber(Math.round(totalVal * pay.ratio)); amountInputHtml = `<div style="color:var(--yellow); font-weight:bold;">$${disp}</div>`; } 
+                else { amountInputHtml = `<input type="text" class="mini-date" placeholder="金額" value="${formatNumber(pay.amount || '')}" style="width:80px; text-align:right;" onfocus="toNum(this)" onblur="toCur(this); updatePaymentAmount('${p.id}', ${idx}, this.value, 'engineering')">`; }
+                let stageSelectorHtml = '';
+                if (type === 'engineering' || type === 'warranty') {
+                    let options = '<option value="">-- 對應進度 --</option>'; const order = p.stageOrder || DEFAULT_ENG_ORDER;
+                    order.forEach(sid => { const sName = STAGES_ENG_DEF[sid]; const isStageEnabled = p.stages && p.stages[sid] && p.stages[sid].enabled !== false; if(isStageEnabled || sid === 'es_sign') { const sel = pay.linkedStage === sid ? 'selected' : ''; options += `<option value="${sid}" ${sel}>${sName}</option>`; } });
+                    stageSelectorHtml = `<select class="stage-selector" onchange="updatePaymentLink('${p.id}', ${idx}, this.value, 'engineering')">${options}</select>`;
+                }
+                payContainer.innerHTML += `<div class="payment-row"><div class="payment-header"><div class="payment-check-area" onclick="togglePayment('${p.id}', ${idx}, '${type === 'design'?'design':'engineering'}')"><div class="custom-checkbox ${pay.done ? 'checked' : ''}" style="border-color:var(--teal)"></div><span>${pay.name}</span></div><div class="payment-info-area">${amountInputHtml}<input type="date" class="mini-date" value="${pay.date}" style="width:110px; margin-top:5px;" onchange="updatePaymentDate('${p.id}', ${idx}, this.value, '${type === 'design'?'design':'engineering'}')"></div></div>${stageSelectorHtml}</div>`;
+            });
+        }
+        function togglePayment(pid, idx, type) { const list = type === 'design' ? designProjects : engProjects; const p = list.find(x => x.id === pid); p.payments[idx].done = !p.payments[idx].done; if(p.payments[idx].done && !p.payments[idx].date) p.payments[idx].date = new Date().toISOString().split('T')[0]; saveData(); if(document.getElementById('payment-page').classList.contains('active')) renderPaymentPage(); else renderDetailPayments(p, type); }
         function updatePaymentDate(pid, idx, val, type) { const list = type === 'design' ? designProjects : engProjects; const p = list.find(x => x.id === pid); p.payments[idx].date = val; saveData(); }
         function updatePaymentLink(pid, idx, val, type) { const list = type === 'design' ? designProjects : engProjects; const p = list.find(x => x.id === pid); p.payments[idx].linkedStage = val; saveData(); }
-        function createProject() {
-            const name = document.getElementById('new-name').value; if (!name) return;
-            const newId = (addModeType==='design'?'ds_':'eng_')+Date.now();
-            const newObj = { id: newId, name: name, stages: {}, logs: [], status: 'active', designPrice: '', engPrice: '', payments: [] };
-            if (addModeType === 'design') { newObj.payments = [ { name: '簽約金 (50%)', ratio: 0.5, done: false, date: '' }, { name: '尾款 (50%)', ratio: 0.5, done: false, date: '' } ]; newObj.stageOrder = [...DEFAULT_DESIGN_ORDER]; designProjects.push(newObj); saveData(); closeAddModal(); openDetail('design', newId); } 
-            else { newObj.stageOrder = [...DEFAULT_ENG_ORDER]; engProjects.push(newObj); saveData(); closeAddModal(); openDetail('engineering', newId); }
-        }
-        function saveCurrent() { saveData(); } // 只有在需要全頁重刷時才需要邏輯，V15 主要靠個別 updateField
+        function saveCurrent() { const list = (currentType === 'design') ? designProjects : engProjects; const p = list.find(x => x.id === currentId); if (!p) return; ['name', 'client', 'phone', 'address', 'parking', 'code'].forEach(key => { document.getElementById('d-' + key).value = p[key]; }); if (currentType === 'design') p.designPrice = parseCurrency(document.getElementById('d-design-price').value); else { p.engPrice = parseCurrency(document.getElementById('d-eng-price').value); } saveData(); }
         function deleteCurrentProject() { if (!confirm('確定刪除？')) return; if (currentType === 'design') designProjects = designProjects.filter(x => x.id !== currentId); else engProjects = engProjects.filter(x => x.id !== currentId); saveData(); renderCalendar(); document.getElementById('calendar-events').innerHTML = '點擊日期查看行程'; goBack(); }
-        function toggleStageEnable(sid,e){engProjects.find(x=>x.id===currentId).stages[sid].enabled=e; saveData(); openDetail(currentType,currentId);}
-        function toggleDone(sid){const l=currentType==='design'?designProjects:engProjects; const p=l.find(x=>x.id===currentId); p.stages[sid].done=!p.stages[sid].done; saveData(); openDetail(currentType,currentId);}
         function formatNumber(num) { return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
         function parseCurrency(str) { return parseInt(str.toString().replace(/,/g, '')) || 0; }
         function addEngineeringPaymentStage() { const p = engProjects.find(x => x.id === currentId); if(!p.payments) p.payments = []; const nextIdx = p.payments.length + 1; p.payments.push({ name: `第 ${nextIdx} 期款`, amount: 0, done: false, date: '', linkedStage: '' }); saveData(); openDetail('engineering', currentId); }
+        function renderList(type) { let list=[], cid=''; if(type==='design'){list=designProjects;cid='design-list-container';}else if(type==='engineering'){list=engProjects.filter(p=>p.status==='active'||p.status==='suspended');cid='engineering-list-container';}else{list=engProjects.filter(p=>p.status==='warranty');cid='warranty-list-container';} const c=document.getElementById(cid); c.innerHTML=''; list.sort((a,b)=>(a.status==='suspended'?1:-1)); if(list.length===0) c.innerHTML='<div style="text-align:center;color:#666;margin-top:30px">暫無案件</div>'; list.forEach(p=>{ const defs = type === 'design' ? STAGES_DESIGN_DEF : STAGES_ENG_DEF; const order = p.stageOrder || (type === 'design' ? DEFAULT_DESIGN_ORDER : DEFAULT_ENG_ORDER); let currentProgress = '尚未開始', total = 0, done = 0; for(let i=0; i<order.length; i++) { const sid = order[i]; const s = (p.stages && p.stages[sid]) || {}; const isEnabled = type === 'design' ? true : (s.enabled !== false); if(isEnabled) { total++; if(s.done) { done++; currentProgress = defs[sid]; } } } const pct=total===0?0:Math.round((done/total)*100); let tags=''; if(p.status==='tracking')tags+='<span class="tag tag-track">追蹤中</span>'; if(p.status==='suspended')tags+='<span class="tag tag-suspend">暫緩</span>'; if(p.status==='warranty')tags+='<span class="tag tag-warranty">保固中</span>'; let oType=type==='warranty'?'engineering':type; c.innerHTML+=`<div class="project-card" onclick="openDetail('${type==='warranty'?'warranty':oType}','${p.id}')"><div style="position:relative;z-index:2;"><div style="font-weight:bold;color:var(--text-primary)">${p.name} ${tags}</div><div style="font-size:0.9rem;color:var(--text-secondary)">${p.client||''}</div><div class="card-progress-text">目前進度：${currentProgress}</div></div><div class="progress-bg"><div class="progress-fill" style="width:${pct}%"></div></div></div>`; }); }
         function renderActionBar(type, status) { const b = document.getElementById('action-bar-container'); b.innerHTML = ''; if (type === 'design') b.innerHTML = `<button class="action-btn btn-track" onclick="updateDesignStatus('tracking')">追蹤中</button><button class="action-btn btn-del" onclick="deleteCurrentProject()">刪除</button><button class="action-btn btn-done" onclick="convertToEngineering()">完成</button>`; else if (type === 'engineering') b.innerHTML = `<button class="action-btn btn-del" onclick="deleteCurrentProject()">刪除</button><button class="action-btn btn-suspend" onclick="toggleSuspend()">${status==='suspended'?'恢復':'暫緩'}</button><button class="action-btn btn-done" onclick="moveToWarranty()">完工</button>`; else if (type === 'warranty') b.innerHTML = `<button class="action-btn btn-del" onclick="deleteCurrentProject()">刪除紀錄</button>`; }
         function toggleSuspend(){const p=engProjects.find(x=>x.id===currentId); p.status=p.status==='suspended'?'active':'suspended'; saveData(); renderCalendar(); goBack();}
         function moveToWarranty(){if(!confirm('確認完工?'))return; const p=engProjects.find(x=>x.id===currentId); p.status='warranty'; p.warrantyDate=new Date().toISOString().split('T')[0]; saveData(); renderCalendar(); navigateTo('warranty-list-page');}
         function updateDesignStatus(s){designProjects.find(x=>x.id===currentId).status=s; saveData(); goBack();}
         function convertToEngineering(){if(!confirm('轉工程?')){updateDesignStatus('completed');return;} const d=designProjects.find(x=>x.id===currentId); d.status='completed'; const ne={id:'eng_'+Date.now(), originId:d.id, name:d.name, client:d.client, phone:d.phone, address:d.address, parking:d.parking, code:d.code, logs:[], stages:{}, status:'active', engPrice:'', payments:[], stageOrder:[...DEFAULT_ENG_ORDER]}; engProjects.push(ne); saveData(); openDetail('engineering', ne.id);}
+        function toggleStageEnable(sid,e){engProjects.find(x=>x.id===currentId).stages[sid].enabled=e; saveData(); openDetail(currentType,currentId);}
+        function toggleDone(sid){const l=currentType==='design'?designProjects:engProjects; const p=l.find(x=>x.id===currentId); p.stages[sid].done=!p.stages[sid].done; saveData(); openDetail(currentType,currentId);}
         function checkAlerts(){ const l=document.getElementById('alert-list'); l.innerHTML=''; const t=new Date().toISOString().split('T')[0]; let h=false; const chk=(projs,lbl,defs)=>{projs.forEach(p=>{if(p.status==='suspended'||p.status==='warranty')return; Object.keys(p.stages||{}).forEach(sid=>{const s=p.stages[sid]; if(s.enabled!==false&&s.end&&s.end<t&&!s.done){h=true; l.innerHTML+=`<div class="alert-item" onclick="openDetail('${lbl==='設計'?'design':'engineering'}','${p.id}')">⚠️ [${lbl}] ${p.name} 延誤</div>`;}})})}; chk(designProjects,'設計',STAGES_DESIGN_DEF); engProjects.forEach(p=>{if(p.status==='suspended'||p.status==='warranty')return; Object.keys(p.stages||{}).forEach(sid=>{const s=p.stages[sid]; if(s.enabled!==false&&s.end&&s.end<t&&!s.done){h=true; l.innerHTML+=`<div class="alert-item" onclick="openDetail('engineering','${p.id}')">⚠️ [工程] ${p.name}-${STAGES_ENG_DEF[sid]} 延誤</div>`;}})}); engProjects.forEach(p=>{if(p.status==='suspended'){h=true;l.innerHTML+=`<div class="alert-item" style="color:var(--orange)" onclick="openDetail('engineering','${p.id}')">⛔ [暫緩] ${p.name}</div>`;}}); engProjects.forEach(p=>{if(p.status==='warranty'&&p.warrantyDate){const d=new Date(p.warrantyDate); d.setMonth(d.getMonth()+10); if(t>=d.toISOString().split('T')[0]){h=true; l.innerHTML+=`<div class="alert-item" style="color:var(--purple)" onclick="openDetail('warranty','${p.id}')">📞 [保固] ${p.name} 維修關懷</div>`;}}}); document.getElementById('alert-dashboard').style.display=h?'block':'none'; }
         function renderCalendar(){ const y=calDate.getFullYear(), m=calDate.getMonth(); document.getElementById('cal-month-year').innerText=`${y}年 ${m+1}月`; const c=document.getElementById('calendar-days'); c.innerHTML=''; for(let i=0;i<new Date(y,m,1).getDay();i++)c.innerHTML+='<div></div>'; for(let d=1;d<=new Date(y,m+1,0).getDate();d++){ const ds=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`; let hasDesign=false, hasEng=false, hasWar=false; designProjects.forEach(p=>{Object.values(p.stages||{}).forEach(s=>{if(s.start&&s.end&&ds>=s.start&&ds<=s.end)hasDesign=true;});}); engProjects.forEach(p=>{if(p.status==='warranty'){if(p.warrantyDate){let endWar=new Date(p.warrantyDate); endWar.setFullYear(endWar.getFullYear()+1); if(ds>=p.warrantyDate&&ds<=endWar.toISOString().split('T')[0])hasWar=true;}}else{Object.values(p.stages||{}).forEach(s=>{if(p.stages[s.id]?.enabled!==false&&s.start&&s.end&&ds>=s.start&&ds<=s.end)hasEng=true;});}}); let barsHtml='<div class="cal-bar-container">'; if(hasDesign)barsHtml+='<div class="cal-bar bar-design"></div>'; if(hasEng)barsHtml+='<div class="cal-bar bar-eng"></div>'; if(hasWar)barsHtml+='<div class="cal-bar bar-warranty"></div>'; barsHtml+='</div>'; const div=document.createElement('div'); div.className=`cal-date`; div.innerHTML=`<span>${d}</span>${barsHtml}`; div.onclick=()=>showEvents(ds,div); c.appendChild(div); } }
         function showEvents(ds,el){ document.querySelectorAll('.cal-date').forEach(e=>e.classList.remove('active')); el.classList.add('active'); const b=document.getElementById('calendar-events'); b.innerHTML=`<div style="font-weight:bold;margin-bottom:10px">📅 ${ds}</div>`; let h=''; const add=(l,lbl,def,typ)=>l.forEach(p=>{Object.keys(p.stages||{}).forEach(sid=>{const s=p.stages[sid]; if(s.enabled!==false&&s.start&&s.end&&ds>=s.start&&ds<=s.end){let j=typ; if(typ==='engineering'&&p.status==='warranty')j='warranty'; let sName = typ==='design'?def[sid] : STAGES_ENG_DEF[sid]; h+=`<div class="event-item" onclick="openDetail('${j}','${p.id}')"><div class="dot" style="background:var(--${typ==='design'?'blue':'yellow'})"></div>進行中：${p.name} - ${sName}</div>`;}});}); add(designProjects,'設',STAGES_DESIGN_DEF,'design'); add(engProjects,'工',[],'engineering'); if(h==='')h='<div style="color:#666">今日無行程</div>'; b.innerHTML+=h; }
@@ -596,7 +600,7 @@
         function openAddModal(t){addModeType=t; document.getElementById('modal-title').innerText=t==='design'?'新增設計':'新增工程'; document.getElementById('add-modal').style.display='flex'; document.getElementById('new-name').value='';}
         function closeAddModal(){document.getElementById('add-modal').style.display='none';}
         function changeMonth(n){calDate.setMonth(calDate.getMonth()+n); renderCalendar();}
-        function saveData(){localStorage.setItem('db_design_v15',JSON.stringify(designProjects)); localStorage.setItem('db_eng_v15',JSON.stringify(engProjects));}
+        function saveData(){localStorage.setItem('db_design_v16',JSON.stringify(designProjects)); localStorage.setItem('db_eng_v16',JSON.stringify(engProjects));}
     </script>
 </body>
 </html>
