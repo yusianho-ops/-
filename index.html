@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>對錯空間 v25.6 (Secure Login)</title>
+    <title>對錯空間 v25.7 (Login Fix)</title>
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#202124">
@@ -29,8 +29,8 @@
         /* Overlays */
         #loading-overlay { position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:9999; display:flex; justify-content:center; align-items:center; color:white; font-size:1.2rem; flex-direction: column; gap:10px; text-align: center; padding: 20px;}
         
-        /* Login Overlay */
-        #login-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: var(--bg-color); z-index: 10000; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; box-sizing: border-box; }
+        /* Login Overlay - Fixed: display none by default */
+        #login-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: var(--bg-color); z-index: 10000; display: none; flex-direction: column; align-items: center; justify-content: center; padding: 20px; box-sizing: border-box; }
         .login-box { background: var(--surface-color); padding: 30px; border-radius: 12px; width: 100%; max-width: 320px; text-align: center; border: 1px solid var(--divider); }
         .login-input { width: 100%; padding: 12px; margin-bottom: 15px; background: rgba(0,0,0,0.2); border: 1px solid var(--divider); color: var(--text-primary); border-radius: 6px; box-sizing: border-box; font-size: 1rem; }
         .login-btn { width: 100%; padding: 12px; background: var(--blue); color: #202124; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 1rem; }
@@ -126,7 +126,7 @@
         <div id="loading-msg">資料載入中...</div>
     </div>
 
-    <!-- V25.6 Login Overlay -->
+    <!-- V25.7 Login Overlay - Fixed CSS -->
     <div id="login-overlay">
         <div class="login-box">
             <h2 style="margin-top:0; color:var(--blue);">對錯空間實驗室</h2>
@@ -281,22 +281,23 @@
         let draggedItem = null, touchDragSrcIndex = null, tempPhotoFile = null;
         let isEditMode = false;
 
-        // V25.6: XSS Protection Helper
         function safe(str) {
             if (!str) return '';
-            return String(str)
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#039;");
+            return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
         }
 
-        // V25.6: Auth State Listener
         window.onload = () => {
+            // FIXED: CSS handles default state, this forces sync
             document.getElementById('loading-overlay').style.display = 'flex';
+            
             auth.onAuthStateChanged(user => {
                 if (user) {
+                    // CRITICAL FIX: If anonymous, sign out to force Email Login
+                    if (user.isAnonymous) {
+                        auth.signOut();
+                        return;
+                    }
+                    
                     document.getElementById('login-overlay').style.display = 'none';
                     document.getElementById('loading-msg').innerText = '載入資料中...';
                     initFirestoreListeners();
@@ -311,7 +312,10 @@
             const e = document.getElementById('login-email').value;
             const p = document.getElementById('login-password').value;
             if(!e || !p) return alert('請輸入帳號密碼');
+            // Show loading during login
+            document.getElementById('loading-overlay').style.display = 'flex';
             auth.signInWithEmailAndPassword(e, p).catch(err => {
+                document.getElementById('loading-overlay').style.display = 'none';
                 document.getElementById('login-error').innerText = "登入失敗: " + err.message;
             });
         }
@@ -323,14 +327,21 @@
         }
 
         function initFirestoreListeners() {
-            // Unsubscribe existing listeners if any could be implemented here
+            // Added Error Handling to prevent hanging
             db.collection("design_projects").onSnapshot(snap => {
                 designProjects = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 refreshUI();
+            }, error => {
+                alert("讀取設計資料失敗 (權限不足或網路問題): " + error.message);
+                document.getElementById('loading-overlay').style.display = 'none';
             });
+
             db.collection("eng_projects").onSnapshot(snap => {
                 engProjects = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 refreshUI();
+                document.getElementById('loading-overlay').style.display = 'none';
+            }, error => {
+                alert("讀取工程資料失敗: " + error.message);
                 document.getElementById('loading-overlay').style.display = 'none';
             });
         }
@@ -431,7 +442,6 @@
                 const p = list.find(x => x.id === id); 
                 if(!p) { alert('查無此案件資料'); return; }
 
-                // Safe value setting
                 ['name', 'client', 'phone', 'address', 'parking', 'code'].forEach(key => { document.getElementById('d-' + key).value = p[key] || ''; }); 
                 
                 const dPriceRow = document.getElementById('design-price-row'); const ePriceRow = document.getElementById('engineering-price-row'); const wDateRow = document.getElementById('warranty-date-row'); const payBtn = document.getElementById('add-payment-btn'); 
@@ -502,7 +512,6 @@
                      header += `<label class="toggle-switch"><input type="checkbox" ${sData.enabled ? 'checked' : ''} onchange="toggleStageEnable('${sid}', this.checked)"><span class="slider"></span></label>`;
                 }
                 
-                // Safe: escape name
                 header += `<div style="flex:1; display:flex; align-items:center" onclick="if(!isEditMode && ${sData.enabled}) toggleDoneOptimistic('${sid}')"><div class="custom-checkbox"></div><span style="font-weight:bold">${safe(sName)}</span></div></div>`;
                 
                 if (sData.enabled) {
@@ -593,7 +602,6 @@
                     paymentsHtml += `<div class="payment-row"><div class="payment-header"><div class="payment-check-area" onclick="togglePayment('${p.id}', ${idx}, '${currentPaymentTab}')"><div class="custom-checkbox ${pay.done ? 'checked' : ''}" style="border-color:var(--teal)"></div><div style="display:flex; flex-direction:column"><span>${safe(pay.name)}</span>${linkedStageName}</div></div><div class="payment-info-area"><div style="color:var(--yellow); font-weight:bold;">$${amountDisplay}</div><div style="font-size:0.85rem;color:#888;">${formatDate(pay.date)}</div></div></div></div>`; 
                 }); 
                 const div = document.createElement('div'); div.className = 'payment-card'; 
-                // XSS Protection Applied
                 div.innerHTML = `<div class="payment-title">${safe(p.name)} <span style="font-size:0.8rem; font-weight:normal; color:#888;">(${safe(p.client||'')})</span></div><div class="payment-amount">總額：$${formatNumber(totalVal)}</div>${profitHtml}${paymentsHtml}`; 
                 container.appendChild(div); 
             }); 
@@ -601,7 +609,6 @@
 
         async function addLog(){ const d=document.getElementById('new-log-date').value; const t=document.getElementById('new-log-text').value; if(!d)return alert('請選擇日期'); if(!t&&!tempPhotoFile)return alert('請輸入內容或選擇照片'); document.getElementById('loading-overlay').style.display = 'flex'; let photoUrl = ''; if(tempPhotoFile) { try { const storageRef = storage.ref(); const fileRef = storageRef.child(`project_logs/${Date.now()}_${tempPhotoFile.name}`); await fileRef.put(tempPhotoFile); photoUrl = await fileRef.getDownloadURL(); } catch(e) { console.error(e); alert("Upload failed"); document.getElementById('loading-overlay').style.display = 'none'; return; } } const collection = currentType === 'design' ? "design_projects" : "eng_projects"; const list = currentType === 'design' ? designProjects : engProjects; const p = list.find(x => x.id === currentId); const newLog = { id: Date.now(), date: d, content: t, photo: photoUrl }; const updatedLogs = [...(p.logs || []), newLog]; await updateCloud(collection, currentId, { logs: updatedLogs }); p.logs = updatedLogs; renderLogs(p); document.getElementById('loading-overlay').style.display = 'none'; clearTempData(); document.getElementById('new-log-date').value = new Date().toISOString().split('T')[0]; }
         
-        // XSS Protected Logs
         function renderLogs(p){const c=document.getElementById('log-list-container'); c.innerHTML=''; (p.logs||[]).sort((a,b)=>new Date(b.date)-new Date(a.date)).forEach(l=>{c.innerHTML+=`<div class="log-item"><button class="log-delete" onclick="deleteLog(${l.id})">×</button><div class="log-date">${formatDate(l.date)}</div><div class="log-content">${safe(l.content)}</div>${l.photo?`<img src="${l.photo}" class="log-image">`:''}</div>`;});}
         
         async function deleteLog(lid){ if(!confirm('刪除?'))return; const collection = currentType === 'design' ? "design_projects" : "eng_projects"; const list = currentType === 'design' ? designProjects : engProjects; const p = list.find(x => x.id === currentId); const updatedLogs = p.logs.filter(k=>k.id!==lid); await updateCloud(collection, currentId, { logs: updatedLogs }); p.logs = updatedLogs; renderLogs(p); }
@@ -678,7 +685,6 @@
             
             paymentList.forEach((pay, idx) => {
                 let amountInputHtml = '';
-                // XSS Protection for Name
                 let nameInputHtml = `<input type="text" class="detail-input" value="${safe(pay.name)}" style="padding:4px; font-size:0.95rem; border:1px solid transparent; background:transparent; width:140px;" onfocus="this.style.border='1px solid var(--blue)'" onblur="this.style.border='1px solid transparent'; updatePaymentName('${p.id}', ${idx}, this.value, '${type === 'design'?'design':'engineering'}')">`;
 
                 if (type === 'design') { 
@@ -697,7 +703,7 @@
                         
                         if(p.stages[sid] && p.stages[sid].enabled !== false || sid === 'es_sign') {
                              const sel = pay.linkedStage === sid ? 'selected' : ''; 
-                             options += `<option value="${sid}" ${sel}>${safe(sName)}</option>`; // Safe
+                             options += `<option value="${sid}" ${sel}>${safe(sName)}</option>`; 
                         }
                     });
                     stageSelectorHtml = `<select class="stage-selector" onchange="updatePaymentLink('${p.id}', ${idx}, this.value, 'engineering')">${options}</select>`;
@@ -750,7 +756,6 @@
                         if(s.enabled!==false&&s.end&&s.end<t&&!s.done){
                             h=true; 
                             let sName = defs[sid] || s.name; 
-                            // XSS Safe
                             l.innerHTML+=`<div class="alert-item" onclick="openDetail('${lbl==='設計'?'design':'engineering'}','${p.id}')">⚠️ [${lbl}] ${safe(p.name)} - ${safe(sName)} 延誤</div>`;
                         }
                     })
