@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>對錯空間 v25.16 (Calendar Clean)</title>
+    <title>對錯空間 v25.17 (No Warranty Bar)</title>
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#202124">
@@ -766,7 +766,7 @@
                         let sName = STAGES_ENG_DEF[pay.linkedStage] || (p.stages[pay.linkedStage]?.name) || "未知";
                         linkedStageName = `<div style="font-size:0.8rem; color:var(--text-secondary)">連結：${safe(sName)}</div>`; 
                     } 
-                    paymentsHtml += `<div class="payment-row"><div class="payment-header"><div class="payment-check-area" onclick="togglePayment('${p.id}', ${idx}, '${currentPaymentTab}')"><div class="custom-checkbox ${pay.done ? 'checked' : ''}" style="border-color:var(--teal)"></div><div style="display:flex; flex-direction:column"><span>${safe(pay.name)}</span>${linkedStageName}</div></div><div class="payment-info-area"><div style="color:var(--yellow); font-weight:bold;">$${amountDisplay}</div><div style="font-size:0.85rem;color:#888;">${formatDate(pay.date)}</div></div></div></div>`; 
+                    paymentsHtml += `<div class="payment-row"><div class="payment-header"><div class="payment-check-area" onclick="togglePayment('${p.id}', ${idx}, '${currentPaymentTab}')"><div class="custom-checkbox ${pay.done ? 'checked' : ''}" style="border-color:var(--teal)" onclick="togglePayment('${p.id}', ${idx}, '${type === 'design'?'design':'engineering'}')"></div><div style="display:flex; flex-direction:column"><span>${safe(pay.name)}</span>${linkedStageName}</div></div><div class="payment-info-area"><div style="color:var(--yellow); font-weight:bold;">$${amountDisplay}</div><div style="font-size:0.85rem;color:#888;">${formatDate(pay.date)}</div></div></div></div>`; 
                 }); 
                 const div = document.createElement('div'); div.className = 'payment-card'; 
                 div.innerHTML = `<div class="payment-title">${safe(p.name)} <span style="font-size:0.8rem; font-weight:normal; color:#888;">(${safe(p.client||'')})</span></div><div class="payment-amount">總額：$${formatNumber(totalVal)}</div>${profitHtml}${paymentsHtml}`; 
@@ -993,12 +993,8 @@
                 }); 
                 
                 engProjects.forEach(p=>{
-                    if(p.status==='warranty'){
-                        if(p.warrantyDate){
-                            let endWar=new Date(p.warrantyDate); endWar.setFullYear(endWar.getFullYear()+1); 
-                            if(ds>=p.warrantyDate&&ds<=endWar.toISOString().split('T')[0])hasWar=true;
-                        }
-                    } else {
+                    // V25.17: Only show if NOT warranty
+                    if(p.status!=='warranty'){
                         Object.values(p.stages||{}).forEach(s=>{
                             if(s.enabled!==false&&s.start&&s.end&&ds>=s.start&&ds<=s.end) hasEng=true;
                         });
@@ -1008,7 +1004,7 @@
                 let barsHtml='<div class="cal-bar-container">'; 
                 if(hasDesign)barsHtml+='<div class="cal-bar bar-design"></div>'; 
                 if(hasEng)barsHtml+='<div class="cal-bar bar-eng"></div>'; 
-                if(hasWar)barsHtml+='<div class="cal-bar bar-warranty"></div>'; 
+                // V25.17: Removed Warranty Bar
                 barsHtml+='</div>'; 
                 
                 const div=document.createElement('div'); div.className=`cal-date`; div.innerHTML=`<span>${d}</span>${barsHtml}`; 
@@ -1022,11 +1018,13 @@
             let h=''; 
             
             const add=(l,lbl,def,typ)=>l.forEach(p=>{
+                // V25.17: Filter out warranty
+                if(p.status === 'warranty') return;
+
                 Object.keys(p.stages||{}).forEach(sid=>{
                     const s=p.stages[sid]; 
                     if(s.enabled!==false&&s.start&&s.end&&ds>=s.start&&ds<=s.end){
                         let j=typ; 
-                        if(typ==='engineering'&&p.status==='warranty')j='warranty'; 
                         let sName = def[sid] || s.name; 
                         h+=`<div class="event-item" onclick="openDetail('${j}','${p.id}')"><div class="dot" style="background:var(--${typ==='design'?'blue':'yellow'})"></div>進行中：${safe(p.name)} - ${safe(sName)}</div>`;
                     }
