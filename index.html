@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>對錯空間 v25.17 (No Warranty Bar)</title>
+    <title>對錯空間 v25.18 (Log Edit & Date)</title>
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#202124">
@@ -95,7 +95,8 @@
         .log-list { margin-top: 10px; } .log-item { background: #2b2c2f; border-radius: 8px; padding: 15px; margin-bottom: 15px; border-left: 4px solid var(--blue); position: relative; }
         .log-date { font-size: 0.8rem; color: var(--blue); margin-bottom: 5px; font-weight: bold; } .log-content { font-size: 0.95rem; line-height: 1.4; white-space: pre-wrap; margin-bottom: 10px; } .log-image { width: 100%; border-radius: 6px; margin-top: 5px; border: 1px solid var(--divider); }
         .log-delete { position: absolute; top: 10px; right: 10px; color: var(--red); background: none; border: none; cursor: pointer; font-size: 1.2rem; }
-        .log-edit { position: absolute; top: 10px; right: 40px; color: var(--text-secondary); background: none; border: none; cursor: pointer; font-size: 1.2rem; }
+        /* Fix 1: Edit button style */
+        .log-edit { position: absolute; top: 10px; right: 40px; color: var(--text-secondary); background: none; border: 1px solid var(--text-secondary); border-radius:12px; cursor: pointer; font-size: 0.8rem; padding: 2px 8px; }
 
         .payment-tabs { display: flex; border-bottom: 1px solid var(--divider); margin-bottom: 15px; }
         .tab-btn { flex: 1; padding: 12px; background: none; border: none; color: var(--text-secondary); border-bottom: 2px solid transparent; cursor: pointer; font-size: 1rem; } .tab-btn.active { color: var(--teal); border-bottom-color: var(--teal); font-weight: bold; }
@@ -162,6 +163,7 @@
         <div class="calendar-section">
             <div class="calendar-header">
                 <button onclick="changeMonth(-1)" style="background:none; border:none; color:var(--text-primary); font-size:1.5rem">‹</button>
+                <!-- Fix 2: Calendar Header Format -->
                 <span id="cal-month-year" style="font-weight:bold;"></span>
                 <button onclick="changeMonth(1)" style="background:none; border:none; color:var(--text-primary); font-size:1.5rem">›</button>
             </div>
@@ -411,6 +413,7 @@
 
         function formatDate(dStr) {
             if(!dStr) return '';
+            // Fix 2: Force Slash format
             return safe(dStr.replace(/-/g, '/'));
         }
 
@@ -661,7 +664,6 @@
                     let details = `<div class="stage-details">`;
                     if (type === 'engineering' || type === 'warranty') {
                         const stageTax = sData.taxEnabled ? Math.round((parseInt(sData.cost)||0)*0.05) : 0;
-                        // Fix 1: Removed oninput re-render trigger, using only onblur for save
                         details += `
                         <div style="display:flex; gap:10px; margin-bottom:8px;">
                             <input type="text" class="detail-input" placeholder="廠商" value="${safe(sData.vendor || '')}" style="flex:1; font-size:0.9rem; padding:8px;" onchange="updateStageField('${sid}','vendor',this.value)">
@@ -766,7 +768,7 @@
                         let sName = STAGES_ENG_DEF[pay.linkedStage] || (p.stages[pay.linkedStage]?.name) || "未知";
                         linkedStageName = `<div style="font-size:0.8rem; color:var(--text-secondary)">連結：${safe(sName)}</div>`; 
                     } 
-                    paymentsHtml += `<div class="payment-row"><div class="payment-header"><div class="payment-check-area" onclick="togglePayment('${p.id}', ${idx}, '${currentPaymentTab}')"><div class="custom-checkbox ${pay.done ? 'checked' : ''}" style="border-color:var(--teal)" onclick="togglePayment('${p.id}', ${idx}, '${type === 'design'?'design':'engineering'}')"></div><div style="display:flex; flex-direction:column"><span>${safe(pay.name)}</span>${linkedStageName}</div></div><div class="payment-info-area"><div style="color:var(--yellow); font-weight:bold;">$${amountDisplay}</div><div style="font-size:0.85rem;color:#888;">${formatDate(pay.date)}</div></div></div></div>`; 
+                    paymentsHtml += `<div class="payment-row"><div class="payment-header"><div class="payment-check-area" onclick="togglePayment('${p.id}', ${idx}, '${currentPaymentTab}')"><div class="custom-checkbox ${pay.done ? 'checked' : ''}" style="border-color:var(--teal)" onclick="togglePayment('${p.id}', ${idx}, '${currentPaymentTab}')"><div style="display:flex; flex-direction:column"><span>${safe(pay.name)}</span>${linkedStageName}</div></div><div class="payment-info-area"><div style="color:var(--yellow); font-weight:bold;">$${amountDisplay}</div><div style="font-size:0.85rem;color:#888;">${formatDate(pay.date)}</div></div></div></div>`; 
                 }); 
                 const div = document.createElement('div'); div.className = 'payment-card'; 
                 div.innerHTML = `<div class="payment-title">${safe(p.name)} <span style="font-size:0.8rem; font-weight:normal; color:#888;">(${safe(p.client||'')})</span></div><div class="payment-amount">總額：$${formatNumber(totalVal)}</div>${profitHtml}${paymentsHtml}`; 
@@ -774,13 +776,89 @@
             }); 
         }
 
-        async function addLog(){ const d=document.getElementById('new-log-date').value; const t=document.getElementById('new-log-text').value; if(!d)return alert('請選擇日期'); if(!t&&!tempPhotoFile)return alert('請輸入內容或選擇照片'); document.getElementById('loading-overlay').style.display = 'flex'; let photoUrl = ''; if(tempPhotoFile) { try { const storageRef = storage.ref(); const fileRef = storageRef.child(`project_logs/${Date.now()}_${tempPhotoFile.name}`); await fileRef.put(tempPhotoFile); photoUrl = await fileRef.getDownloadURL(); } catch(e) { console.error(e); alert("Upload failed"); document.getElementById('loading-overlay').style.display = 'none'; return; } } const collection = currentType === 'design' ? "design_projects" : "eng_projects"; const list = currentType === 'design' ? designProjects : engProjects; const p = list.find(x => x.id === currentId); const newLog = { id: Date.now(), date: d, content: t, photo: photoUrl }; const updatedLogs = [...(p.logs || []), newLog]; await updateCloud(collection, currentId, { logs: updatedLogs }); p.logs = updatedLogs; renderLogs(p); document.getElementById('loading-overlay').style.display = 'none'; clearTempData(); document.getElementById('new-log-date').value = new Date().toISOString().split('T')[0]; }
+        // Fix 1: Log Edit Logic
+        async function addLog(){ 
+            const d = document.getElementById('new-log-date').value; 
+            const t = document.getElementById('new-log-text').value; 
+            if(!d) return alert('請選擇日期'); 
+            if(!t && !tempPhotoFile) return alert('請輸入內容或選擇照片'); 
+            
+            document.getElementById('loading-overlay').style.display = 'flex'; 
+            
+            let photoUrl = ''; 
+            if (editingLogId) {
+                const list = currentType === 'design' ? designProjects : engProjects;
+                const p = list.find(x => x.id === currentId);
+                const oldLog = p.logs.find(l => l.id === editingLogId);
+                if (oldLog) photoUrl = oldLog.photo || '';
+            }
+
+            if(tempPhotoFile) { 
+                try { 
+                    const storageRef = storage.ref(); 
+                    const fileRef = storageRef.child(`project_logs/${Date.now()}_${tempPhotoFile.name}`); 
+                    await fileRef.put(tempPhotoFile); 
+                    photoUrl = await fileRef.getDownloadURL(); 
+                } catch(e) { 
+                    console.error(e); 
+                    alert("Upload failed"); 
+                    document.getElementById('loading-overlay').style.display = 'none'; 
+                    return; 
+                } 
+            } 
+            
+            const collection = currentType === 'design' ? "design_projects" : "eng_projects"; 
+            const list = currentType === 'design' ? designProjects : engProjects; 
+            const p = list.find(x => x.id === currentId); 
+            
+            let updatedLogs = [...(p.logs || [])];
+            
+            if (editingLogId) {
+                const idx = updatedLogs.findIndex(l => l.id === editingLogId);
+                if (idx !== -1) {
+                    updatedLogs[idx] = { id: editingLogId, date: d, content: t, photo: photoUrl };
+                }
+            } else {
+                updatedLogs.push({ id: Date.now(), date: d, content: t, photo: photoUrl });
+            }
+
+            await updateCloud(collection, currentId, { logs: updatedLogs }); 
+            p.logs = updatedLogs; 
+            renderLogs(p); 
+            document.getElementById('loading-overlay').style.display = 'none'; 
+            clearTempData(); 
+            document.getElementById('new-log-date').value = new Date().toISOString().split('T')[0]; 
+        }
         
-        function renderLogs(p){const c=document.getElementById('log-list-container'); c.innerHTML=''; (p.logs||[]).sort((a,b)=>new Date(b.date)-new Date(a.date)).forEach(l=>{c.innerHTML+=`<div class="log-item"><button class="log-delete" onclick="deleteLog(${l.id})">×</button><div class="log-date">${formatDate(l.date)}</div><div class="log-content">${safe(l.content)}</div>${l.photo?`<img src="${l.photo}" class="log-image">`:''}</div>`;});}
+        function editLog(lid) {
+            const list = currentType === 'design' ? designProjects : engProjects;
+            const p = list.find(x => x.id === currentId);
+            const l = p.logs.find(k => k.id === lid);
+            if(l) {
+                editingLogId = lid;
+                document.getElementById('new-log-date').value = l.date;
+                document.getElementById('new-log-text').value = l.content;
+                document.getElementById('btn-save-log').innerText = '更新紀錄';
+                window.scrollTo({ top: document.querySelector('.log-input-area').offsetTop - 60, behavior: 'smooth' });
+            }
+        }
+
+        // Fix 1: Added Edit Button
+        function renderLogs(p){
+            const c=document.getElementById('log-list-container'); c.innerHTML=''; 
+            (p.logs||[]).sort((a,b)=>new Date(b.date)-new Date(a.date)).forEach(l=>{
+                c.innerHTML+=`<div class="log-item">
+                    <button class="log-delete" onclick="deleteLog(${l.id})">×</button>
+                    <button class="log-edit" onclick="editLog(${l.id})">✎ 編輯</button>
+                    <div class="log-date">${formatDate(l.date)}</div>
+                    <div class="log-content">${safe(l.content)}</div>
+                    ${l.photo?`<img src="${l.photo}" class="log-image">`:''}
+                </div>`;
+            });
+        }
         
         async function deleteLog(lid){ if(!confirm('刪除?'))return; const collection = currentType === 'design' ? "design_projects" : "eng_projects"; const list = currentType === 'design' ? designProjects : engProjects; const p = list.find(x => x.id === currentId); const updatedLogs = p.logs.filter(k=>k.id!==lid); await updateCloud(collection, currentId, { logs: updatedLogs }); p.logs = updatedLogs; renderLogs(p); }
         
-        // Fix 1: Update without full re-render
         async function updateStageField(sid, f, v) { 
             const collection = currentType === 'design' ? "design_projects" : "eng_projects"; 
             const val = (f === 'cost') ? parseCurrency(v) : v; 
@@ -792,11 +870,20 @@
             const updateKey = `stages.${sid}.${f}`; 
             await updateCloud(collection, currentId, { [updateKey]: val }); 
             
-            // If updating 'cost' or 'taxEnabled', recalculate total display (cheap operation)
             if(f === 'cost' || f === 'taxEnabled' || f === 'paymentStatus') {
                 if (currentType === 'engineering') calculateTotalEng(p);
-                // Only re-render list if switching status color or tax toggle (visual change outside input)
-                if (f !== 'cost') renderStages(p, currentType);
+                if (f === 'cost' || f === 'taxEnabled') {
+                    const span = document.getElementById(`stage-tax-val-${sid}`);
+                    if(span) {
+                        const cost = parseInt(p.stages[sid].cost) || 0;
+                        const tax = p.stages[sid].taxEnabled ? Math.round(cost * 0.05) : 0;
+                        span.innerText = `含稅 ${tax>0 ? '($'+formatNumber(tax)+')' : ''}`;
+                    }
+                }
+                if (f === 'paymentStatus') {
+                    renderStages(p, currentType); 
+                    checkAdvancementAlert(p); 
+                }
             }
         }
 
@@ -980,7 +1067,8 @@
 
         function renderCalendar(){ 
             const y=calDate.getFullYear(), m=calDate.getMonth(); 
-            document.getElementById('cal-month-year').innerText=`${y}年 ${m+1}月`; 
+            // Fix 2: YYYY/MM Format
+            document.getElementById('cal-month-year').innerText = `${y}/${String(m+1).padStart(2,'0')}`; 
             const c=document.getElementById('calendar-days'); c.innerHTML=''; 
             for(let i=0;i<new Date(y,m,1).getDay();i++)c.innerHTML+='<div></div>'; 
             
@@ -993,7 +1081,6 @@
                 }); 
                 
                 engProjects.forEach(p=>{
-                    // V25.17: Only show if NOT warranty
                     if(p.status!=='warranty'){
                         Object.values(p.stages||{}).forEach(s=>{
                             if(s.enabled!==false&&s.start&&s.end&&ds>=s.start&&ds<=s.end) hasEng=true;
@@ -1004,7 +1091,6 @@
                 let barsHtml='<div class="cal-bar-container">'; 
                 if(hasDesign)barsHtml+='<div class="cal-bar bar-design"></div>'; 
                 if(hasEng)barsHtml+='<div class="cal-bar bar-eng"></div>'; 
-                // V25.17: Removed Warranty Bar
                 barsHtml+='</div>'; 
                 
                 const div=document.createElement('div'); div.className=`cal-date`; div.innerHTML=`<span>${d}</span>${barsHtml}`; 
@@ -1018,7 +1104,6 @@
             let h=''; 
             
             const add=(l,lbl,def,typ)=>l.forEach(p=>{
-                // V25.17: Filter out warranty
                 if(p.status === 'warranty') return;
 
                 Object.keys(p.stages||{}).forEach(sid=>{
